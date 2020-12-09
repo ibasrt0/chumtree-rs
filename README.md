@@ -2,9 +2,12 @@ chumtree-rs
 ===========
 
 A [rust](https://www.rust-lang.org/) program that computes the **C**hecks**UM** 
-of a directory **TREE**. Also, the structure of the dir tree (dirs & symlinks)
-and essential metadata for files (size, mtime) are captured. The intended uses
-cases are for detecting bit rot and verifying copies of dir trees.
+of a directory **TREE**.
+
+For a dir tree, output a JSON file with all the dirs, all the symlinks and 
+all the files with their checksum, size & mtime.
+
+The intended uses cases are for detecting bit rot and verifying copies of dir trees.
 
 The hash function used as checksum is the very fast [SeaHash]() but
 [warning: it is not a cryptographic function](https://docs.rs/seahash/4.0.1/seahash/#a-word-of-warning).

@@ -217,28 +217,35 @@ where
 
 fn main() -> Result<(), io::Error> {
     let args: Vec<String> = env::args().collect();
-    let default_dir = path::Path::new(".");
-    let dir = if args.len() > 1 {
-        path::Path::new(args[1].as_str())
+    if args.len() > 1 {
+        let dir = path::Path::new(args[1].as_str());
+        let prefix = dir.clone();
+        let mut dir_tree = DirTree::new(&dir);
+
+        dir_tree.visit_dir_tree(dir, &prefix)?;
+        eprintln!();
+
+        dir_tree.found_dirs = dir_tree.dirs.len();
+        dir_tree.found_symlinks = dir_tree.symlinks.len();
+        dir_tree.found_files = dir_tree.files.len();
+        dir_tree.files_total_size = dir_tree.files.iter().map(|f| f.len).sum();
+
+        dir_tree.dirs.sort_unstable();
+        dir_tree.symlinks.sort_unstable();
+        dir_tree.files.sort_unstable();
+
+        println!("{}", serde_json::to_string_pretty(&dir_tree).unwrap());
+
+        Ok(())
     } else {
-        default_dir
-    };
-    let prefix = dir.clone();
-    let mut dir_tree = DirTree::new(&dir);
-
-    dir_tree.visit_dir_tree(dir, &prefix)?;
-    eprintln!();
-
-    dir_tree.found_dirs = dir_tree.dirs.len();
-    dir_tree.found_symlinks = dir_tree.symlinks.len();
-    dir_tree.found_files = dir_tree.files.len();
-    dir_tree.files_total_size = dir_tree.files.iter().map(|f| f.len).sum();
-
-    dir_tree.dirs.sort_unstable();
-    dir_tree.symlinks.sort_unstable();
-    dir_tree.files.sort_unstable();
-
-    println!("{}", serde_json::to_string_pretty(&dir_tree).unwrap());
-
-    Ok(())
+        eprintln!(
+            "Usage: chumtree dir-tree-path > chumtree.json
+For a dir tree, output a JSON file with all the dirs, all the symlinks and
+all the files with their checksum, size & mtime."
+        );
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "command line arguments are missing",
+        ))
+    }
 }

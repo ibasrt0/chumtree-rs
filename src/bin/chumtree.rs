@@ -14,9 +14,11 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use chrono;
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use seahash::SeaHasher;
 use serde::Serialize;
 use std::cmp::{PartialEq, PartialOrd};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::hash::Hasher;
@@ -45,6 +47,9 @@ struct DirTree {
     timestamp: chrono::DateTime<chrono::offset::Utc>,
 
     base_dir: path::PathBuf,
+    exclude_set: HashSet<String>,
+    #[serde(skip)]
+    exclude_globset: globset::GlobSet,
 
     found_dirs: usize,
     found_symlinks: usize,
@@ -57,11 +62,24 @@ struct DirTree {
 }
 
 impl DirTree {
-    fn new(base_dir: &path::Path) -> DirTree {
+    fn new(base_dir: path::PathBuf, exclude_set: HashSet<String>) -> DirTree {
+        let exclude_gobset = exclude_set
+            .iter()
+            .fold(&mut GlobSetBuilder::new(), |builder, glob| {
+                if let Ok(glob) = Glob::new(glob) {
+                    builder.add(glob);
+                }
+                builder
+            })
+            .build()
+            .unwrap_or_else(|_| GlobSet::empty());
+
         DirTree {
             timestamp: chrono::offset::Utc::now(),
 
-            base_dir: base_dir.into(),
+            base_dir: base_dir,
+            exclude_set: exclude_set,
+            exclude_globset: exclude_gobset,
 
             found_dirs: 0,
             found_symlinks: 0,
@@ -103,7 +121,6 @@ impl DirTree {
         for dir_entry in fs::read_dir(dir)? {
             let dir_entry = dir_entry?;
             let file_type = dir_entry.file_type()?;
-            let file_name = dir_entry.file_name().into_string().unwrap_or_default();
             let path_without_prefix = dir_entry
                 .path()
                 .strip_prefix(prefix)
@@ -113,7 +130,9 @@ impl DirTree {
                 .nfc()
                 .collect::<String>()
                 .into();
-            if file_type.is_dir() {
+            if self.exclude_globset.is_match(&path_without_prefix) {
+                // ignore excluded paths
+            } else if file_type.is_dir() {
                 self.dirs.push(path_without_prefix);
                 self.log_progress(None);
                 self.visit_dir_tree(dir_entry.path(), prefix)?
@@ -121,9 +140,7 @@ impl DirTree {
                 let target = fs::read_link(dir_entry.path())?;
                 self.symlinks.push((path_without_prefix, target));
                 self.log_progress(None);
-            } else if file_type.is_file()
-                && !(file_name.starts_with("._") || file_name == ".DS_Store")
-            {
+            } else if file_type.is_file() {
                 let md = dir_entry.metadata()?;
                 let mut total_hashed = 0_u64;
                 self.files.push(FileMetaData {
@@ -219,10 +236,14 @@ fn main() -> Result<(), io::Error> {
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         let dir = path::Path::new(args[1].as_str());
-        let prefix = dir.clone();
-        let mut dir_tree = DirTree::new(&dir);
+        let exclude_set = if args.len() > 2 {
+            args[2..].iter().map(|x| x.clone()).collect()
+        } else {
+            HashSet::new()
+        };
+        let mut dir_tree = DirTree::new(dir.clone().into(), exclude_set);
 
-        dir_tree.visit_dir_tree(dir, &prefix)?;
+        dir_tree.visit_dir_tree(dir, &dir.clone())?;
         eprintln!();
 
         dir_tree.found_dirs = dir_tree.dirs.len();
@@ -239,9 +260,18 @@ fn main() -> Result<(), io::Error> {
         Ok(())
     } else {
         eprintln!(
-            "Usage: chumtree dir-tree-path > chumtree.json
-For a dir tree, output a JSON file with all the dirs, all the symlinks and
-all the files with their checksum, size & mtime."
+            "Usage:
+
+    chumtree dir-tree-path exclude-glob-pattern* > chumtree.json
+
+For a dir tree in 'dir-tree-path', output a JSON file with all the dirs,
+all the symlinks and all the files with their checksum, size & mtime.
+
+Use zero or more 'exclude-glob-pattern' to exclude files or dirs that match
+the glob patterns; example: use '.DS_Store ._*' to exclude macOS folder settings 
+and AppleDouble resource fork files.
+See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
+"
         );
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,

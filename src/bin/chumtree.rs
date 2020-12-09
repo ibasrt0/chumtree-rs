@@ -143,7 +143,6 @@ impl DirTree {
 }
 
 // custom serialization for DateTime
-// to display milli/nanoseconds if they are non-zero
 fn serialize_date_time<S>(
     dt: &chrono::DateTime<chrono::offset::Utc>,
     serializer: S,
@@ -151,7 +150,8 @@ fn serialize_date_time<S>(
 where
     S: serde::Serializer,
 {
-    serializer.serialize_str(&format!("{:?}", dt))
+    // display milli/nanoseconds if they are non-zero
+    serializer.serialize_str(&dt.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true))
 }
 
 fn bufcopy<F: FnMut(u64)>(

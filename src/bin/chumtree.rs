@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use chrono;
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{Glob, GlobSetBuilder};
 use seahash::SeaHasher;
 use serde::Serialize;
 use std::cmp::{PartialEq, PartialOrd};
@@ -62,19 +62,16 @@ struct DirTree {
 }
 
 impl DirTree {
-    fn new(base_dir: path::PathBuf, exclude_set: HashSet<String>) -> DirTree {
-        let exclude_gobset = exclude_set
-            .iter()
-            .fold(&mut GlobSetBuilder::new(), |builder, glob| {
-                if let Ok(glob) = Glob::new(glob) {
-                    builder.add(glob);
-                }
-                builder
-            })
-            .build()
-            .unwrap_or_else(|_| GlobSet::empty());
-
-        DirTree {
+    fn new(
+        base_dir: path::PathBuf,
+        exclude_set: HashSet<String>,
+    ) -> Result<DirTree, globset::Error> {
+        let mut globset_builder = GlobSetBuilder::new();
+        for glob in &exclude_set {
+            globset_builder.add(Glob::new(glob)?);
+        }
+        let exclude_gobset = globset_builder.build()?;
+        Ok(DirTree {
             timestamp: chrono::offset::Utc::now(),
 
             base_dir: base_dir,
@@ -89,7 +86,7 @@ impl DirTree {
             dirs: Vec::new(),
             symlinks: Vec::new(),
             files: Vec::new(),
-        }
+        })
     }
 
     fn log_progress(&self, hashed_bytes: Option<(u64, u64)>) {
@@ -241,7 +238,9 @@ fn main() -> Result<(), io::Error> {
         } else {
             HashSet::new()
         };
-        let mut dir_tree = DirTree::new(dir.clone().into(), exclude_set);
+
+        let mut dir_tree = DirTree::new(dir.clone().into(), exclude_set)
+            .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())))?;
 
         dir_tree.visit_dir_tree(dir, &dir.clone())?;
         eprintln!();

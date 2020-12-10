@@ -4,39 +4,22 @@ chumtree-rs
 A [rust](https://www.rust-lang.org/) program that computes the **C**hecks**UM** 
 of a directory **TREE**.
 
-For a dir tree, output a JSON file with all the dirs, all the symlinks and 
-all the files with their checksum, size & mtime.
+The intended uses cases are for detecting bit rot and verifying copies of dir
+trees, so the program generates a JSON output file with all the dirs, all the
+symlinks and all the files with their checksum, size & mtime. Unix and Windows
+permissions are ignored, to be able to compare between copies in filesystems
+with different capabilities. The output JSON file tries to be easily comparable
+with, for example, `diff`.
 
-The intended uses cases are for detecting bit rot and verifying copies of dir trees.
+The checksum is a concatenate 64 bits hash for each 1 MiB block. The hash
+function used as checksum is the very fast [SeaHash]() but **WARNING**:
+[it is not a cryptographic function](https://docs.rs/seahash/4.0.1/seahash/#a-word-of-warning).
 
-The hash function used as checksum is the very fast [SeaHash]() but
-[warning: it is not a cryptographic function](https://docs.rs/seahash/4.0.1/seahash/#a-word-of-warning).
-
-Unix and Windows permissions are ignored, to be able to compare checksum files 
-between copies in filesystems with different capabilities.
-
-To deal with macOS quirks:
--  `.DS_Store` and AppleDouble files (`._*`) are
-filtered 
-- unicode code points in the file names are recomposed, using
+To reverse the [unicode decomposition](https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms) imposed by macOS unicode code points in the file names are recomposed, using
 [Unicode Normal Form](https://en.wikipedia.org/wiki/Unicode_equivalence#Normal_forms)
-Canonical Composition (NFC) to reverse the decomposition (NFD) imposed by macOS.
-
-Currently, for simplicity, neither features are optional but probably they
-should be (maybe this will be fixed in the future).
-
-For a given directory tree, `chumtree` outputs a pretty printed JSON that it is
-easily comparable with, for example, `diff`. The content of the JSON is:
-- invocation timestamp
-- the base directory
-- all files total size in bytes
-- relative path of all the directories
-- relative path of all the symlinks and they targets
-- relative path of all the files
-- for each file:
-  - size in bytes
-  - time of last modification (mtime)
-  - a checksum using a concatenate 64 bits hash for each 1 MiB block
+Canonical Composition (NFC).  
+Currently, for simplicity, this  features is not optional but it should be,
+this will be fixed in the future.
 
 Install
 -------
@@ -49,19 +32,32 @@ Build from the source:
 - Copy `chumtree-rs/target/release/chumtree` binary to a directory listed in the
   `PATH` env var. 
 
-
 Usage
 -----
-Usage example:
+```
+$ chumtree dir-tree-path exclude-glob-pattern* > chumtree.json
+```
+
+For a dir tree in `dir-tree-path`, output a JSON file with all the dirs,
+all the symlinks and all the files with their checksum, size & mtime.
+
+Use zero or more `exclude-glob-pattern` to exclude files or dirs that match
+the glob patterns; for example: use `.DS_Store` and `._*` to exclude macOS
+folder settings and AppleDouble resource fork files.  
+See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
+
+Example
+-------
 ```
 $ chumtree test_dirtree > test_dirtree.chumtree.json
-     0 dirs,      1 symlinks,      5 files found                                          
+     0 dirs,      1 symlinks,      5 files found
 ```
 Output example, content of `test_dirtree.chumtree.json`:
 ```json
 {
   "timestamp": "2020-11-26T12:55:35.837246Z",
   "base_dir": "test_dirtree",
+  "exclude_set": [],
   "found_dirs": 0,
   "found_symlinks": 1,
   "found_files": 5,

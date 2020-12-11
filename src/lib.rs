@@ -35,13 +35,18 @@ pub struct Options {
     exclude_globset: globset::GlobSet,
 }
 impl Options {
-    pub fn new(
-        base_dir: path::PathBuf,
-        exclude_set: HashSet<String>,
-    ) -> Result<Options, globset::Error> {
+    pub fn new<T>(base_dir: path::PathBuf, globs_args: T) -> Result<Options, globset::Error>
+    where
+        T: IntoIterator,
+        T::Item: ToString,
+    {
+        let mut exclude_set = HashSet::new();
         let mut globset_builder = GlobSetBuilder::new();
-        for glob in &exclude_set {
-            globset_builder.add(Glob::new(glob)?);
+        for glob in globs_args.into_iter() {
+            let glob = glob.to_string();
+            if exclude_set.insert(glob.clone()) {
+                globset_builder.add(Glob::new(glob.as_str())?);
+            }
         }
         let exclude_globset = globset_builder.build()?;
         Ok(Options {

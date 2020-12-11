@@ -14,7 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use chumtree::ChumtreeFile;
-use std::collections::HashSet;
 use std::env;
 use std::io;
 use std::path;
@@ -33,16 +32,9 @@ See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
 ";
 
 fn main() -> Result<(), io::Error> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
-        let dir = path::Path::new(args[1].as_str());
-        let exclude_set = if args.len() > 2 {
-            args[2..].iter().map(|x| x.clone()).collect()
-        } else {
-            HashSet::new()
-        };
-
-        let options = chumtree::Options::new(dir.clone().into(), exclude_set)
+    if let Some(dir) = env::args().nth(1) {
+        let dir = path::Path::new(dir.as_str());
+        let options = chumtree::Options::new(dir.clone().into(), env::args().skip(2))
             .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())))?;
         let mut summary = chumtree::Summary::default();
         let mut dir_tree = chumtree::DirTree::default();

@@ -28,7 +28,7 @@ use unicode_normalization::UnicodeNormalization;
 const MEBI: usize = 1 << 20;
 
 #[derive(Serialize, Debug)]
-struct Options {
+pub struct Options {
     base_dir: path::PathBuf,
     exclude_set: HashSet<String>,
     #[serde(skip)]
@@ -36,7 +36,7 @@ struct Options {
 }
 
 #[derive(Serialize, Debug)]
-struct Summary {
+pub struct Summary {
     found_dirs: usize,
     found_symlinks: usize,
     found_files: usize,
@@ -69,13 +69,86 @@ pub struct ChumtreeFile {
     timestamp: chrono::DateTime<chrono::offset::Utc>,
 
     #[serde(flatten)]
-    options: Options,
+    pub options: Options,
 
     #[serde(flatten)]
-    summary: Summary,
+    pub summary: Summary,
 
     #[serde(flatten)]
     pub dir_tree: DirTree,
+}
+
+fn log_progress(dir_tree: &DirTree, hashed_bytes: Option<(u64, u64)>) {
+    eprint!(
+        "\r{:>6} dirs, {:>6} symlinks, {:>6} files found",
+        dir_tree.dirs.len(),
+        dir_tree.symlinks.len(),
+        dir_tree.files.len()
+    );
+    if let Some(hashed_bytes) = hashed_bytes {
+        eprint!(
+            //234567890123       12       1       12345
+            "; hashing... {:>5.1}% {:>8.3}/{:>8.3} MiB",
+            100.0 * hashed_bytes.0 as f64 / hashed_bytes.1 as f64,
+            hashed_bytes.0 as f64 / (1024.0 * 1024.0),
+            hashed_bytes.1 as f64 / (1024.0 * 1024.0),
+        )
+    } else {
+        //                    12345  12345678 12345678
+        //       1234567890123     12        1        12345
+        eprint!("                                          ")
+    }
+}
+
+pub fn visit_dir_tree(
+    options: &Options,
+    summary: &mut Summary,
+    dir_tree: &mut DirTree,
+    dir: impl AsRef<path::Path>,
+    prefix: &impl AsRef<path::Path>,
+) -> io::Result<()> {
+    for dir_entry in fs::read_dir(dir)? {
+        let dir_entry = dir_entry?;
+        let file_type = dir_entry.file_type()?;
+        let path_without_prefix = dir_entry
+            .path()
+            .strip_prefix(prefix)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .nfc()
+            .collect::<String>()
+            .into();
+        if options.exclude_globset.is_match(&path_without_prefix) {
+            // ignore excluded paths
+        } else if file_type.is_dir() {
+            dir_tree.dirs.push(path_without_prefix);
+            summary.found_dirs += 1;
+            log_progress(dir_tree,None);
+            visit_dir_tree(options,summary,dir_tree,dir_entry.path(), prefix)?
+        } else if file_type.is_symlink() {
+            let target = fs::read_link(dir_entry.path())?;
+            dir_tree.symlinks.push((path_without_prefix, target));
+            summary.found_symlinks += 1;
+            log_progress(dir_tree,None);
+        } else if file_type.is_file() {
+            let md = dir_entry.metadata()?;
+            let mut total_hashed = 0_u64;
+            dir_tree.files.push(FileMetaData {
+                path: path_without_prefix,
+                len: md.len(),
+                modified: md.modified()?.into(),
+                hash: concat_hash(dir_entry.path(), |len| {
+                    total_hashed += len;
+                    log_progress(dir_tree,Some((total_hashed, md.len())));
+                })?,
+            });
+            summary.found_files += 1;
+            summary.files_total_size += md.len();
+            log_progress(dir_tree,None);
+        }
+    }
+    Ok(())
 }
 
 impl ChumtreeFile {
@@ -112,75 +185,6 @@ impl ChumtreeFile {
         })
     }
 
-    fn log_progress(&self, hashed_bytes: Option<(u64, u64)>) {
-        eprint!(
-            "\r{:>6} dirs, {:>6} symlinks, {:>6} files found",
-            self.dir_tree.dirs.len(),
-            self.dir_tree.symlinks.len(),
-            self.dir_tree.files.len()
-        );
-        if let Some(hashed_bytes) = hashed_bytes {
-            eprint!(
-                //234567890123       12       1       12345
-                "; hashing... {:>5.1}% {:>8.3}/{:>8.3} MiB",
-                100.0 * hashed_bytes.0 as f64 / hashed_bytes.1 as f64,
-                hashed_bytes.0 as f64 / (1024.0 * 1024.0),
-                hashed_bytes.1 as f64 / (1024.0 * 1024.0),
-            )
-        } else {
-            //                    12345  12345678 12345678
-            //       1234567890123     12        1        12345
-            eprint!("                                          ")
-        }
-    }
-    pub fn visit_dir_tree(
-        &mut self,
-        dir: impl AsRef<path::Path>,
-        prefix: &impl AsRef<path::Path>,
-    ) -> io::Result<()> {
-        for dir_entry in fs::read_dir(dir)? {
-            let dir_entry = dir_entry?;
-            let file_type = dir_entry.file_type()?;
-            let path_without_prefix = dir_entry
-                .path()
-                .strip_prefix(prefix)
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .nfc()
-                .collect::<String>()
-                .into();
-            if self.options.exclude_globset.is_match(&path_without_prefix) {
-                // ignore excluded paths
-            } else if file_type.is_dir() {
-                self.dir_tree.dirs.push(path_without_prefix);
-                self.summary.found_dirs += 1;
-                self.log_progress(None);
-                self.visit_dir_tree(dir_entry.path(), prefix)?
-            } else if file_type.is_symlink() {
-                let target = fs::read_link(dir_entry.path())?;
-                self.dir_tree.symlinks.push((path_without_prefix, target));
-                self.summary.found_symlinks += 1;
-                self.log_progress(None);
-            } else if file_type.is_file() {
-                let md = dir_entry.metadata()?;
-                let mut total_hashed = 0_u64;
-                self.dir_tree.files.push(FileMetaData {
-                    path: path_without_prefix,
-                    len: md.len(),
-                    modified: md.modified()?.into(),
-                    hash: concat_hash(dir_entry.path(), |len| {
-                        total_hashed += len;
-                        self.log_progress(Some((total_hashed, md.len())));
-                    })?,
-                });
-                self.summary.found_files += 1;
-                self.summary.files_total_size += md.len();
-                self.log_progress(None);
-            }
-        }
-        Ok(())
-    }
 }
 
 // custom serialization for DateTime

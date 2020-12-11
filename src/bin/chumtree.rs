@@ -13,11 +13,24 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use chumtree::DirTree;
 use std::collections::HashSet;
 use std::env;
 use std::io;
 use std::path;
-use chumtree::DirTree;
+
+const USAGE_TEXT: &str = "Usage:
+
+  chumtree dir-tree-path exclude-glob-pattern* > chumtree.json
+
+For a dir tree in 'dir-tree-path', output a JSON file with all the dirs,
+all the symlinks and all the files with their checksum, size & mtime.
+
+Use zero or more 'exclude-glob-pattern' to exclude files or dirs that match
+the glob patterns; for example: use '.DS_Store' and '._*' to exclude macOS
+folder settings and AppleDouble resource fork files.
+See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
+";
 
 fn main() -> Result<(), io::Error> {
     let args: Vec<String> = env::args().collect();
@@ -48,20 +61,7 @@ fn main() -> Result<(), io::Error> {
 
         Ok(())
     } else {
-        eprintln!(
-            "Usage:
-
-    chumtree dir-tree-path exclude-glob-pattern* > chumtree.json
-
-For a dir tree in 'dir-tree-path', output a JSON file with all the dirs,
-all the symlinks and all the files with their checksum, size & mtime.
-
-Use zero or more 'exclude-glob-pattern' to exclude files or dirs that match
-the glob patterns; for example: use '.DS_Store' and '._*' to exclude macOS
-folder settings and AppleDouble resource fork files.
-See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
-"
-        );
+        eprintln!("{}", USAGE_TEXT);
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "command line arguments are missing",

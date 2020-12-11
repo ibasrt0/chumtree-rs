@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use chumtree::DirTree;
+use chumtree::ChumtreeFile;
 use std::collections::HashSet;
 use std::env;
 use std::io;
@@ -42,15 +42,15 @@ fn main() -> Result<(), io::Error> {
             HashSet::new()
         };
 
-        let mut dir_tree = DirTree::new(dir.clone().into(), exclude_set)
+        let mut dir_tree = ChumtreeFile::new(dir.clone().into(), exclude_set)
             .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())))?;
 
         dir_tree.visit_dir_tree(dir, &dir.clone())?;
         eprintln!();
 
-        dir_tree.dirs.sort_unstable();
-        dir_tree.symlinks.sort_unstable();
-        dir_tree.files.sort_unstable();
+        dir_tree.dir_tree.dirs.sort_unstable();
+        dir_tree.dir_tree.symlinks.sort_unstable();
+        dir_tree.dir_tree.files.sort_unstable();
 
         println!("{}", serde_json::to_string_pretty(&dir_tree).unwrap());
 

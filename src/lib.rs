@@ -27,6 +27,22 @@ use unicode_normalization::UnicodeNormalization;
 
 const MEBI: usize = 1 << 20;
 
+#[derive(Serialize, Debug)]
+struct Options {
+    base_dir: path::PathBuf,
+    exclude_set: HashSet<String>,
+    #[serde(skip)]
+    exclude_globset: globset::GlobSet,
+}
+
+#[derive(Serialize, Debug)]
+struct Summary {
+    found_dirs: usize,
+    found_symlinks: usize,
+    found_files: usize,
+    files_total_size: u64,
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct ConcatHash(Vec<u8>);
 
@@ -42,58 +58,66 @@ pub struct FileMetaData {
 
 #[derive(Serialize, Debug)]
 pub struct DirTree {
-    #[serde(serialize_with = "serialize_date_time")]
-    timestamp: chrono::DateTime<chrono::offset::Utc>,
-
-    base_dir: path::PathBuf,
-    exclude_set: HashSet<String>,
-    #[serde(skip)]
-    exclude_globset: globset::GlobSet,
-
-    found_dirs: usize,
-    found_symlinks: usize,
-    found_files: usize,
-    files_total_size: u64,
-
     pub dirs: Vec<path::PathBuf>,
     pub symlinks: Vec<(path::PathBuf, path::PathBuf)>,
     pub files: Vec<FileMetaData>,
 }
 
-impl DirTree {
+#[derive(Serialize, Debug)]
+pub struct ChumtreeFile {
+    #[serde(serialize_with = "serialize_date_time")]
+    timestamp: chrono::DateTime<chrono::offset::Utc>,
+
+    #[serde(flatten)]
+    options: Options,
+
+    #[serde(flatten)]
+    summary: Summary,
+
+    #[serde(flatten)]
+    pub dir_tree: DirTree,
+}
+
+impl ChumtreeFile {
     pub fn new(
         base_dir: path::PathBuf,
         exclude_set: HashSet<String>,
-    ) -> Result<DirTree, globset::Error> {
+    ) -> Result<ChumtreeFile, globset::Error> {
         let mut globset_builder = GlobSetBuilder::new();
         for glob in &exclude_set {
             globset_builder.add(Glob::new(glob)?);
         }
-        let exclude_gobset = globset_builder.build()?;
-        Ok(DirTree {
+        let exclude_globset = globset_builder.build()?;
+        Ok(ChumtreeFile {
             timestamp: chrono::offset::Utc::now(),
 
-            base_dir: base_dir,
-            exclude_set: exclude_set,
-            exclude_globset: exclude_gobset,
+            options: Options {
+                base_dir,
+                exclude_set,
+                exclude_globset,
+            },
 
-            found_dirs: 0,
-            found_symlinks: 0,
-            found_files: 0,
-            files_total_size: 0,
+            summary: Summary {
+                found_dirs: 0,
+                found_symlinks: 0,
+                found_files: 0,
+                files_total_size: 0,
+            },
 
-            dirs: Vec::new(),
-            symlinks: Vec::new(),
-            files: Vec::new(),
+            dir_tree: DirTree {
+                dirs: Vec::new(),
+                symlinks: Vec::new(),
+                files: Vec::new(),
+            },
         })
     }
 
     fn log_progress(&self, hashed_bytes: Option<(u64, u64)>) {
         eprint!(
             "\r{:>6} dirs, {:>6} symlinks, {:>6} files found",
-            self.dirs.len(),
-            self.symlinks.len(),
-            self.files.len()
+            self.dir_tree.dirs.len(),
+            self.dir_tree.symlinks.len(),
+            self.dir_tree.files.len()
         );
         if let Some(hashed_bytes) = hashed_bytes {
             eprint!(
@@ -126,22 +150,22 @@ impl DirTree {
                 .nfc()
                 .collect::<String>()
                 .into();
-            if self.exclude_globset.is_match(&path_without_prefix) {
+            if self.options.exclude_globset.is_match(&path_without_prefix) {
                 // ignore excluded paths
             } else if file_type.is_dir() {
-                self.dirs.push(path_without_prefix);
-                self.found_dirs += 1;
+                self.dir_tree.dirs.push(path_without_prefix);
+                self.summary.found_dirs += 1;
                 self.log_progress(None);
                 self.visit_dir_tree(dir_entry.path(), prefix)?
             } else if file_type.is_symlink() {
                 let target = fs::read_link(dir_entry.path())?;
-                self.symlinks.push((path_without_prefix, target));
-                self.found_symlinks += 1;
+                self.dir_tree.symlinks.push((path_without_prefix, target));
+                self.summary.found_symlinks += 1;
                 self.log_progress(None);
             } else if file_type.is_file() {
                 let md = dir_entry.metadata()?;
                 let mut total_hashed = 0_u64;
-                self.files.push(FileMetaData {
+                self.dir_tree.files.push(FileMetaData {
                     path: path_without_prefix,
                     len: md.len(),
                     modified: md.modified()?.into(),
@@ -150,8 +174,8 @@ impl DirTree {
                         self.log_progress(Some((total_hashed, md.len())));
                     })?,
                 });
-                self.found_files += 1;
-                self.files_total_size += md.len();
+                self.summary.found_files += 1;
+                self.summary.files_total_size += md.len();
                 self.log_progress(None);
             }
         }

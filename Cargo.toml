@@ -1,6 +1,6 @@
 [package]
-name = "chumtree-rs"
-version = "0.1.0"
+name = "chumtree"
+version = "0.2.0"
 authors = ["Israel Basurto <isra@ibasrt0.net>"]
 edition = "2018"
 

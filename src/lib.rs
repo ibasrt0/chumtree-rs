@@ -34,8 +34,25 @@ pub struct Options {
     #[serde(skip)]
     exclude_globset: globset::GlobSet,
 }
+impl Options {
+    pub fn new(
+        base_dir: path::PathBuf,
+        exclude_set: HashSet<String>,
+    ) -> Result<Options, globset::Error> {
+        let mut globset_builder = GlobSetBuilder::new();
+        for glob in &exclude_set {
+            globset_builder.add(Glob::new(glob)?);
+        }
+        let exclude_globset = globset_builder.build()?;
+        Ok(Options {
+            base_dir,
+            exclude_set,
+            exclude_globset,
+        })
+    }
+}
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 pub struct Summary {
     found_dirs: usize,
     found_symlinks: usize,
@@ -56,7 +73,7 @@ pub struct FileMetaData {
     hash: ConcatHash,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 pub struct DirTree {
     pub dirs: Vec<path::PathBuf>,
     pub symlinks: Vec<(path::PathBuf, path::PathBuf)>,
@@ -66,7 +83,7 @@ pub struct DirTree {
 #[derive(Serialize, Debug)]
 pub struct ChumtreeFile {
     #[serde(serialize_with = "serialize_date_time")]
-    timestamp: chrono::DateTime<chrono::offset::Utc>,
+    pub timestamp: chrono::DateTime<chrono::offset::Utc>,
 
     #[serde(flatten)]
     pub options: Options,
@@ -124,13 +141,13 @@ pub fn visit_dir_tree(
         } else if file_type.is_dir() {
             dir_tree.dirs.push(path_without_prefix);
             summary.found_dirs += 1;
-            log_progress(dir_tree,None);
-            visit_dir_tree(options,summary,dir_tree,dir_entry.path(), prefix)?
+            log_progress(dir_tree, None);
+            visit_dir_tree(options, summary, dir_tree, dir_entry.path(), prefix)?
         } else if file_type.is_symlink() {
             let target = fs::read_link(dir_entry.path())?;
             dir_tree.symlinks.push((path_without_prefix, target));
             summary.found_symlinks += 1;
-            log_progress(dir_tree,None);
+            log_progress(dir_tree, None);
         } else if file_type.is_file() {
             let md = dir_entry.metadata()?;
             let mut total_hashed = 0_u64;
@@ -140,51 +157,15 @@ pub fn visit_dir_tree(
                 modified: md.modified()?.into(),
                 hash: concat_hash(dir_entry.path(), |len| {
                     total_hashed += len;
-                    log_progress(dir_tree,Some((total_hashed, md.len())));
+                    log_progress(dir_tree, Some((total_hashed, md.len())));
                 })?,
             });
             summary.found_files += 1;
             summary.files_total_size += md.len();
-            log_progress(dir_tree,None);
+            log_progress(dir_tree, None);
         }
     }
     Ok(())
-}
-
-impl ChumtreeFile {
-    pub fn new(
-        base_dir: path::PathBuf,
-        exclude_set: HashSet<String>,
-    ) -> Result<ChumtreeFile, globset::Error> {
-        let mut globset_builder = GlobSetBuilder::new();
-        for glob in &exclude_set {
-            globset_builder.add(Glob::new(glob)?);
-        }
-        let exclude_globset = globset_builder.build()?;
-        Ok(ChumtreeFile {
-            timestamp: chrono::offset::Utc::now(),
-
-            options: Options {
-                base_dir,
-                exclude_set,
-                exclude_globset,
-            },
-
-            summary: Summary {
-                found_dirs: 0,
-                found_symlinks: 0,
-                found_files: 0,
-                files_total_size: 0,
-            },
-
-            dir_tree: DirTree {
-                dirs: Vec::new(),
-                symlinks: Vec::new(),
-                files: Vec::new(),
-            },
-        })
-    }
-
 }
 
 // custom serialization for DateTime

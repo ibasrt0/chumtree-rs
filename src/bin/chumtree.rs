@@ -42,17 +42,28 @@ fn main() -> Result<(), io::Error> {
             HashSet::new()
         };
 
-        let mut chumtree_file = ChumtreeFile::new(dir.clone().into(), exclude_set)
+        let options = chumtree::Options::new(dir.clone().into(), exclude_set)
             .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())))?;
+        let mut summary = chumtree::Summary::default();
+        let mut dir_tree = chumtree::DirTree::default();
 
-        chumtree::visit_dir_tree(&chumtree_file.options, &mut chumtree_file.summary, &mut chumtree_file.dir_tree ,dir, &dir.clone())?;
+        chumtree::visit_dir_tree(&options, &mut summary, &mut dir_tree, dir, &dir.clone())?;
         eprintln!();
 
-        chumtree_file.dir_tree.dirs.sort_unstable();
-        chumtree_file.dir_tree.symlinks.sort_unstable();
-        chumtree_file.dir_tree.files.sort_unstable();
+        dir_tree.dirs.sort_unstable();
+        dir_tree.symlinks.sort_unstable();
+        dir_tree.files.sort_unstable();
 
-        println!("{}", serde_json::to_string_pretty(&chumtree_file).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&ChumtreeFile {
+                timestamp: chrono::offset::Utc::now(),
+                options,
+                summary,
+                dir_tree
+            })
+            .unwrap()
+        );
 
         Ok(())
     } else {

@@ -36,11 +36,21 @@ fn main() -> Result<(), io::Error> {
         let dir = path::Path::new(dir.as_str());
         let options = chumtree::Options::new(dir.clone().into(), env::args().skip(2))
             .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())))?;
+        eprintln!(
+            "base_dir: {:?}, exclude_set: {:?}",
+            options.base_dir, options.exclude_set
+        );
         let mut summary = chumtree::Summary::default();
         let mut dir_tree = chumtree::DirTree::default();
 
         chumtree::visit_dir_tree(&options, &mut summary, &mut dir_tree, dir, &dir.clone())?;
-        eprintln!();
+        eprintln!(
+            "\r{:>6} dirs, {:>6} symlinks, {:>6} files found, {} bytes all files total size",
+            summary.found_dirs,
+            summary.found_symlinks,
+            summary.found_files,
+            summary.files_total_size
+        );
 
         dir_tree.dirs.sort_unstable();
         dir_tree.symlinks.sort_unstable();

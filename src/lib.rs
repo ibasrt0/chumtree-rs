@@ -29,8 +29,8 @@ const MEBI: usize = 1 << 20;
 
 #[derive(Serialize, Debug)]
 pub struct Options {
-    base_dir: path::PathBuf,
-    exclude_set: HashSet<String>,
+    pub base_dir: path::PathBuf,
+    pub exclude_set: HashSet<String>,
     #[serde(skip)]
     exclude_globset: globset::GlobSet,
 }
@@ -59,10 +59,10 @@ impl Options {
 
 #[derive(Serialize, Debug, Default)]
 pub struct Summary {
-    found_dirs: usize,
-    found_symlinks: usize,
-    found_files: usize,
-    files_total_size: u64,
+    pub found_dirs: usize,
+    pub found_symlinks: usize,
+    pub found_files: usize,
+    pub files_total_size: u64,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

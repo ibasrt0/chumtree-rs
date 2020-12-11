@@ -33,7 +33,7 @@ struct ConcatHash(Vec<u8>);
 #[derive(Serialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FileMetaData {
     path: path::PathBuf,
-    pub len: u64,
+    len: u64,
     #[serde(serialize_with = "serialize_date_time")]
     modified: chrono::DateTime<chrono::offset::Utc>,
     #[serde(serialize_with = "serialize_concat_hash")]
@@ -50,10 +50,10 @@ pub struct DirTree {
     #[serde(skip)]
     exclude_globset: globset::GlobSet,
 
-    pub found_dirs: usize,
-    pub found_symlinks: usize,
-    pub found_files: usize,
-    pub files_total_size: u64,
+    found_dirs: usize,
+    found_symlinks: usize,
+    found_files: usize,
+    files_total_size: u64,
 
     pub dirs: Vec<path::PathBuf>,
     pub symlinks: Vec<(path::PathBuf, path::PathBuf)>,
@@ -130,11 +130,13 @@ impl DirTree {
                 // ignore excluded paths
             } else if file_type.is_dir() {
                 self.dirs.push(path_without_prefix);
+                self.found_dirs += 1;
                 self.log_progress(None);
                 self.visit_dir_tree(dir_entry.path(), prefix)?
             } else if file_type.is_symlink() {
                 let target = fs::read_link(dir_entry.path())?;
                 self.symlinks.push((path_without_prefix, target));
+                self.found_symlinks += 1;
                 self.log_progress(None);
             } else if file_type.is_file() {
                 let md = dir_entry.metadata()?;
@@ -148,6 +150,8 @@ impl DirTree {
                         self.log_progress(Some((total_hashed, md.len())));
                     })?,
                 });
+                self.found_files += 1;
+                self.files_total_size += md.len();
                 self.log_progress(None);
             }
         }

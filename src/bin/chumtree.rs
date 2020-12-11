@@ -48,11 +48,6 @@ fn main() -> Result<(), io::Error> {
         dir_tree.visit_dir_tree(dir, &dir.clone())?;
         eprintln!();
 
-        dir_tree.found_dirs = dir_tree.dirs.len();
-        dir_tree.found_symlinks = dir_tree.symlinks.len();
-        dir_tree.found_files = dir_tree.files.len();
-        dir_tree.files_total_size = dir_tree.files.iter().map(|f| f.len).sum();
-
         dir_tree.dirs.sort_unstable();
         dir_tree.symlinks.sort_unstable();
         dir_tree.files.sort_unstable();

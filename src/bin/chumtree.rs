@@ -54,7 +54,7 @@ fn main() -> Result<(), io::Error> {
                 summary,
                 dir_tree
             })
-            .unwrap()
+            .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())))?
         );
 
         Ok(())

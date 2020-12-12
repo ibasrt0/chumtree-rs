@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use chumtree::ChumtreeFile;
 use std::env;
 use std::io;
 use std::path;
@@ -52,19 +51,10 @@ fn main() -> Result<(), io::Error> {
             summary.files_total_size
         );
 
-        dir_tree.dirs.sort_unstable();
-        dir_tree.symlinks.sort_unstable();
-        dir_tree.files.sort_unstable();
-
         println!(
             "{}",
-            serde_json::to_string_pretty(&ChumtreeFile {
-                timestamp: chrono::offset::Utc::now(),
-                options,
-                summary,
-                dir_tree
-            })
-            .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())))?
+            serde_json::to_string_pretty(&dir_tree)
+                .or_else(|e| Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())))?
         );
 
         Ok(())

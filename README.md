@@ -49,58 +49,54 @@ See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
 Example
 -------
 ```
-$ chumtree test_dirtree > test_dirtree.chumtree.json
-     0 dirs,      1 symlinks,      5 files found
+$ chumtree test_dirtree "**/.DS_Store" > test_dirtree.chumtree.json
+base_dir: "test_dirtree/", exclude_set: {"**/.DS_Store"}
+     0 dirs,      1 symlinks,      5 files found, 15732736 bytes all files total size     
 ```
+
 Output example, content of `test_dirtree.chumtree.json`:
 ```json
 {
-  "timestamp": "2020-11-26T12:55:35.837246Z",
-  "base_dir": "test_dirtree",
-  "exclude_set": [],
-  "found_dirs": 0,
-  "found_symlinks": 1,
-  "found_files": 5,
-  "files_total_size": 15732736,
-  "dirs": [],
-  "symlinks": [
-    [
-      "symlink_test",
-      "rand4096"
-    ]
-  ],
-  "files": [
-    {
-      "path": "aaa 123",
+  "aaa 123": {
+    "File": {
       "len": 0,
-      "modified": "2020-11-20T13:29:51.877186453Z",
+      "mtime": "2020-11-20T13:29:51.877186453Z",
       "hash": ""
-    },
-    {
-      "path": "bbb\\",
+    }
+  },
+  "bbb\\": {
+    "File": {
       "len": 0,
-      "modified": "2020-11-20T13:31:06.578608253Z",
+      "mtime": "2020-11-20T13:31:06.578608253Z",
       "hash": ""
-    },
-    {
-      "path": "ccc\n123",
+    }
+  },
+  "ccc\n123": {
+    "File": {
       "len": 0,
-      "modified": "2020-11-20T13:32:01.004653136Z",
+      "mtime": "2020-11-20T13:32:01.004653136Z",
       "hash": ""
-    },
-    {
-      "path": "rand15MiB",
+    }
+  },
+  "rand15MiB": {
+    "File": {
       "len": 15728640,
-      "modified": "2020-11-26T12:31:04.174375782Z",
+      "mtime": "2020-11-26T12:31:04.174375782Z",
       "hash": "B140D6CC95AC720DDFBE1FEED038EBD5E360B9BA95D97F0FAECCBDDDFB9EFD3AD5F3C2E55A7CB57BD69351A9C80C0D8F0DFCDA27D418E6CF110F7698F23AF37D7FD5F89163C2A7520A0D515A2673DE3DCEE5A34611FC92C09CAB692DAE45B0588CD5E28CA3356BB7C29111A3C3DC6A9D875AC0A2"
-    },
-    {
-      "path": "rand4096",
+    }
+  },
+  "rand4096": {
+    "File": {
       "len": 4096,
-      "modified": "2020-11-26T12:30:04.251508553Z",
+      "mtime": "2020-11-26T12:30:04.251508553Z",
       "hash": "3C719153C8749D37"
     }
-  ]
+  },
+  "symlink_test": {
+    "Symlink": {
+      "target": "rand4096"
+    }
+  }
 }
 ```
 

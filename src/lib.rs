@@ -17,8 +17,7 @@ use chrono;
 use globset::{Glob, GlobSetBuilder};
 use seahash::SeaHasher;
 use serde::Serialize;
-use std::cmp::{PartialEq, PartialOrd};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::hash::Hasher;
 use std::io;
@@ -27,11 +26,10 @@ use unicode_normalization::UnicodeNormalization;
 
 const MEBI: usize = 1 << 20;
 
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
 pub struct Options {
     pub base_dir: path::PathBuf,
     pub exclude_set: HashSet<String>,
-    #[serde(skip)]
     exclude_globset: globset::GlobSet,
 }
 impl Options {
@@ -57,7 +55,7 @@ impl Options {
     }
 }
 
-#[derive(Serialize, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct Summary {
     pub found_dirs: usize,
     pub found_symlinks: usize,
@@ -65,47 +63,37 @@ pub struct Summary {
     pub files_total_size: u64,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug)]
 struct ConcatHash(Vec<u8>);
 
-#[derive(Serialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Debug)]
+pub struct SymlinkMetaData {
+    target: path::PathBuf,
+}
+
+#[derive(Serialize, Debug)]
 pub struct FileMetaData {
-    path: path::PathBuf,
     len: u64,
     #[serde(serialize_with = "serialize_date_time")]
-    modified: chrono::DateTime<chrono::offset::Utc>,
+    mtime: chrono::DateTime<chrono::offset::Utc>,
     #[serde(serialize_with = "serialize_concat_hash")]
     hash: ConcatHash,
 }
 
-#[derive(Serialize, Debug, Default)]
-pub struct DirTree {
-    pub dirs: Vec<path::PathBuf>,
-    pub symlinks: Vec<(path::PathBuf, path::PathBuf)>,
-    pub files: Vec<FileMetaData>,
-}
-
 #[derive(Serialize, Debug)]
-pub struct ChumtreeFile {
-    #[serde(serialize_with = "serialize_date_time")]
-    pub timestamp: chrono::DateTime<chrono::offset::Utc>,
-
-    #[serde(flatten)]
-    pub options: Options,
-
-    #[serde(flatten)]
-    pub summary: Summary,
-
-    #[serde(flatten)]
-    pub dir_tree: DirTree,
+pub enum DirEntry {
+    Dir,
+    Symlink(SymlinkMetaData),
+    File(FileMetaData),
 }
 
-fn log_progress(dir_tree: &DirTree, hashed_bytes: Option<(u64, u64)>) {
+#[derive(Serialize, Debug, Default)]
+pub struct DirTree(BTreeMap<path::PathBuf, DirEntry>);
+
+fn log_progress(summary: &Summary, hashed_bytes: Option<(u64, u64)>) {
     eprint!(
         "\r{:>6} dirs, {:>6} symlinks, {:>6} files found",
-        dir_tree.dirs.len(),
-        dir_tree.symlinks.len(),
-        dir_tree.files.len()
+        summary.found_dirs, summary.found_symlinks, summary.found_files
     );
     if let Some(hashed_bytes) = hashed_bytes {
         eprint!(
@@ -144,30 +132,35 @@ pub fn visit_dir_tree(
         if options.exclude_globset.is_match(&path_without_prefix) {
             // ignore excluded paths
         } else if file_type.is_dir() {
-            dir_tree.dirs.push(path_without_prefix);
+            dir_tree.0.insert(path_without_prefix, DirEntry::Dir);
             summary.found_dirs += 1;
-            log_progress(dir_tree, None);
+            log_progress(summary, None);
             visit_dir_tree(options, summary, dir_tree, dir_entry.path(), prefix)?
         } else if file_type.is_symlink() {
             let target = fs::read_link(dir_entry.path())?;
-            dir_tree.symlinks.push((path_without_prefix, target));
+            dir_tree.0.insert(
+                path_without_prefix,
+                DirEntry::Symlink(SymlinkMetaData { target }),
+            );
             summary.found_symlinks += 1;
-            log_progress(dir_tree, None);
+            log_progress(summary, None);
         } else if file_type.is_file() {
             let md = dir_entry.metadata()?;
             let mut total_hashed = 0_u64;
-            dir_tree.files.push(FileMetaData {
-                path: path_without_prefix,
-                len: md.len(),
-                modified: md.modified()?.into(),
-                hash: concat_hash(dir_entry.path(), |len| {
-                    total_hashed += len;
-                    log_progress(dir_tree, Some((total_hashed, md.len())));
-                })?,
-            });
+            dir_tree.0.insert(
+                path_without_prefix,
+                DirEntry::File(FileMetaData {
+                    len: md.len(),
+                    mtime: md.modified()?.into(),
+                    hash: concat_hash(dir_entry.path(), |len| {
+                        total_hashed += len;
+                        log_progress(summary, Some((total_hashed, md.len())));
+                    })?,
+                }),
+            );
             summary.found_files += 1;
             summary.files_total_size += md.len();
-            log_progress(dir_tree, None);
+            log_progress(summary, None);
         }
     }
     Ok(())

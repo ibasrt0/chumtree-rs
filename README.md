@@ -42,7 +42,7 @@ For a dir tree in `dir-tree-path`, output a JSON file with all the dirs,
 all the symlinks and all the files with their checksum, size & mtime.
 
 Use zero or more `exclude-glob-pattern` to exclude files or dirs that match
-the glob patterns; for example: use `.DS_Store` and `._*` to exclude macOS
+the glob patterns; for example: use `**/.DS_Store` and `**/._*` to exclude macOS
 folder settings and AppleDouble resource fork files.  
 See https://docs.rs/globset/0.4/globset/#syntax for the glob pattern syntax.
 

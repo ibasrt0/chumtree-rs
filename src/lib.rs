@@ -72,19 +72,18 @@ pub struct SymlinkMetaData {
 }
 
 #[derive(Serialize, Debug)]
-pub struct FileMetaData {
+pub enum DirEntry {
+    Dir,
+    Symlink {
+        target: path::PathBuf,
+    },
+    File {
     len: u64,
     #[serde(serialize_with = "serialize_date_time")]
     mtime: chrono::DateTime<chrono::offset::Utc>,
     #[serde(serialize_with = "serialize_concat_hash")]
     hash: ConcatHash,
-}
-
-#[derive(Serialize, Debug)]
-pub enum DirEntry {
-    Dir,
-    Symlink(SymlinkMetaData),
-    File(FileMetaData),
+    },
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -138,10 +137,9 @@ pub fn visit_dir_tree(
             visit_dir_tree(options, summary, dir_tree, dir_entry.path(), prefix)?
         } else if file_type.is_symlink() {
             let target = fs::read_link(dir_entry.path())?;
-            dir_tree.0.insert(
-                path_without_prefix,
-                DirEntry::Symlink(SymlinkMetaData { target }),
-            );
+            dir_tree
+                .0
+                .insert(path_without_prefix, DirEntry::Symlink { target });
             summary.found_symlinks += 1;
             log_progress(summary, None);
         } else if file_type.is_file() {
@@ -149,14 +147,14 @@ pub fn visit_dir_tree(
             let mut total_hashed = 0_u64;
             dir_tree.0.insert(
                 path_without_prefix,
-                DirEntry::File(FileMetaData {
+                DirEntry::File {
                     len: md.len(),
                     mtime: md.modified()?.into(),
                     hash: concat_hash(dir_entry.path(), |len| {
                         total_hashed += len;
                         log_progress(summary, Some((total_hashed, md.len())));
                     })?,
-                }),
+                },
             );
             summary.found_files += 1;
             summary.files_total_size += md.len();

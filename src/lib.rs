@@ -63,12 +63,15 @@ pub struct Summary {
     pub files_total_size: u64,
 }
 
-#[derive(Debug)]
-struct ConcatHash(Vec<u8>);
-
 #[derive(Serialize, Debug)]
-pub struct SymlinkMetaData {
-    target: path::PathBuf,
+pub struct ConcatHash(Vec<u8>);
+impl std::string::ToString for ConcatHash {
+    fn to_string(&self) -> String {
+        self.0
+            .iter()
+            .map(|x| format!("{:X?}", x))
+            .collect::<String>()
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -78,11 +81,11 @@ pub enum DirEntry {
         target: path::PathBuf,
     },
     File {
-    len: u64,
-    #[serde(serialize_with = "serialize_date_time")]
-    mtime: chrono::DateTime<chrono::offset::Utc>,
-    #[serde(serialize_with = "serialize_concat_hash")]
-    hash: ConcatHash,
+        len: u64,
+        #[serde(serialize_with = "serialize_date_time")]
+        mtime: chrono::DateTime<chrono::offset::Utc>,
+        #[serde(serialize_with = "serialize_concat_hash")]
+        hash: ConcatHash,
     },
 }
 
@@ -228,11 +231,5 @@ fn serialize_concat_hash<S>(concat_hash: &ConcatHash, serializer: S) -> Result<S
 where
     S: serde::Serializer,
 {
-    serializer.serialize_str(
-        &concat_hash
-            .0
-            .iter()
-            .map(|x| format!("{:X?}", x))
-            .collect::<String>(),
-    )
+    serializer.serialize_str(&concat_hash.to_string())
 }
